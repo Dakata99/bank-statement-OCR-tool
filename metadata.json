@@ -1,0 +1,7 @@
+{
+  "name": "StatementSnap OCR",
+  "description": "Professional bank statement OCR tool using Gemini 3 Flash to extract, categorize, and export transaction data from PDFs and images to CSV.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
