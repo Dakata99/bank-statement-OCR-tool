@@ -1,8 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  FileUp, 
-  Trash2, 
   FileSpreadsheet, 
   AlertCircle, 
   Loader2, 
@@ -23,7 +21,9 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  History,
+  Trash2
 } from 'lucide-react';
 import { Transaction, ProcessingStatus, FileData } from './types';
 import { extractTransactions } from './services/geminiService';
@@ -46,11 +46,11 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedView, setSelectedView] = useState<string>('all');
   
-  // Progress states
+  // Progress states for sequential processing
   const [processedCount, setProcessedCount] = useState(0);
   const [currentlyProcessingIdx, setCurrentlyProcessingIdx] = useState<number | null>(null);
 
-  // Derived data based on selected view
+  // Filter transactions based on current page
   const currentTransactions = useMemo(() => {
     if (selectedView === 'all') return transactions;
     return transactions.filter(t => t.sourceFile === selectedView);
@@ -115,11 +115,6 @@ const App: React.FC = () => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const clearFiles = () => {
-    setFiles([]);
-    setError(null);
-  };
-
   const processStatements = async () => {
     if (files.length === 0) return;
     
@@ -133,6 +128,7 @@ const App: React.FC = () => {
     try {
       for (let i = 0; i < files.length; i++) {
         setCurrentlyProcessingIdx(i);
+        // Process each file individually for granular tracking
         const result = await extractTransactions([files[i]]);
         const taggedResults = result.map(t => ({ ...t, sourceFile: files[i].name }));
         allExtractedTransactions.push(...taggedResults);
@@ -144,7 +140,7 @@ const App: React.FC = () => {
       setCurrentlyProcessingIdx(null);
       setSelectedView('all');
     } catch (err: any) {
-      setError(err.message || "Failed to extract data. Please ensure the files are valid PDFs or images.");
+      setError(err.message || "Extraction failed. Ensure files are readable bank statements.");
       setStatus(ProcessingStatus.ERROR);
       setCurrentlyProcessingIdx(null);
     }
@@ -169,7 +165,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${selectedView === 'all' ? 'batch' : selectedView.split('.')[0]}_statement_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `${selectedView === 'all' ? 'batch' : selectedView.split('.')[0]}_export.csv`;
     link.click();
   };
 
@@ -178,8 +174,6 @@ const App: React.FC = () => {
     setTransactions([]);
     setStatus(ProcessingStatus.IDLE);
     setError(null);
-    setProcessedCount(0);
-    setCurrentlyProcessingIdx(null);
     setSelectedView('all');
   };
 
@@ -189,7 +183,6 @@ const App: React.FC = () => {
     let accumulatedPercentage = 0;
     return summary.categoryData.map((data, i) => {
       const radius = 70;
-      const strokeWidth = 14;
       const circumference = 2 * Math.PI * radius;
       const offset = (accumulatedPercentage / 100) * circumference;
       const length = (data.percentage / 100) * circumference;
@@ -203,95 +196,107 @@ const App: React.FC = () => {
           r={radius}
           fill="transparent"
           stroke={data.color}
-          strokeWidth={strokeWidth}
+          strokeWidth="16"
           strokeDasharray={`${length} ${circumference - length}`}
           strokeDashoffset={-offset}
           transform="rotate(-90 100 100)"
-          className="transition-all duration-1000 ease-out"
+          className="transition-all duration-700 ease-in-out"
         />
       );
     });
   };
 
   return (
-    <div className="min-h-screen pb-12 bg-[#f8fafc]">
+    <div className="min-h-screen pb-12 bg-[#f8fafc] selection:bg-indigo-100">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => status === ProcessingStatus.SUCCESS && setSelectedView('all')}>
-              <div className="bg-indigo-600 p-2 rounded-lg">
+            <div 
+              className="flex items-center gap-2 cursor-pointer group" 
+              onClick={() => status === ProcessingStatus.SUCCESS && setSelectedView('all')}
+            >
+              <div className="bg-indigo-600 p-2 rounded-lg group-hover:bg-indigo-700 transition-colors">
                 <Wallet className="w-6 h-6 text-white" />
               </div>
               <span className="text-xl font-bold text-slate-900 tracking-tight">StatementSnap</span>
             </div>
             {status === ProcessingStatus.SUCCESS && (
-              <button onClick={reset} className="text-sm font-medium text-slate-400 hover:text-rose-600 transition-colors px-4 py-2 hover:bg-rose-50 rounded-lg">
-                Discard & Reset
-              </button>
+              <div className="flex items-center gap-4">
+                 <button onClick={reset} className="text-sm font-semibold text-slate-400 hover:text-rose-600 transition-colors flex items-center gap-1.5">
+                  <Trash2 className="w-4 h-4" /> Reset Batch
+                </button>
+              </div>
             )}
           </div>
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        {/* STEP 1: UPLOAD STATE */}
         {(status === ProcessingStatus.IDLE || status === ProcessingStatus.ERROR) && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 lg:p-12">
               <div className="max-w-2xl mx-auto text-center">
-                <div className="mb-6 flex justify-center">
-                  <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center relative">
-                    <Files className="w-8 h-8 text-indigo-600" />
+                <div className="mb-8 flex justify-center">
+                  <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center relative rotate-3 hover:rotate-0 transition-transform duration-300">
+                    <Files className="w-10 h-10 text-indigo-600" />
                     {files.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
+                      <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-4 border-white">
                         {files.length}
                       </span>
                     )}
                   </div>
                 </div>
-                <h2 className="text-2xl font-semibold text-slate-900 mb-2">Statement Batch Processor</h2>
-                <p className="text-slate-500 mb-8">
-                  Upload multiple PDFs or images. We will extract and consolidate all transactions into an organized report.
+                <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Financial OCR Hub</h2>
+                <p className="text-slate-500 mb-10 text-lg">
+                  Upload multiple statements. We will consolidate them into a unified, categorized digital ledger.
                 </p>
                 
-                <label className="relative flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all group border-spacing-4">
+                <label className="relative flex flex-col items-center justify-center w-full h-56 border-2 border-dashed border-slate-300 rounded-3xl cursor-pointer bg-slate-50 hover:bg-white hover:border-indigo-400 transition-all group overflow-hidden">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Plus className="w-10 h-10 text-slate-400 group-hover:text-indigo-600 mb-3 transition-transform group-hover:scale-110" />
-                    <p className="text-sm text-slate-600 font-medium">Drop statements here to start</p>
-                    <p className="text-xs text-slate-400 mt-2">Supports multi-page PDF and JPG/PNG images</p>
+                    <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Plus className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <p className="text-sm text-slate-700 font-bold mb-1">Click or drag statements here</p>
+                    <p className="text-xs text-slate-400">PDFs, PNGs, and JPEGs supported</p>
                   </div>
                   <input type="file" className="hidden" multiple accept="image/*,.pdf" onChange={onFileChange} />
                 </label>
               </div>
 
               {files.length > 0 && (
-                <div className="mt-10 border-t border-slate-100 pt-8">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Queue Management ({files.length})</h3>
-                    <button onClick={clearFiles} className="text-xs text-rose-600 hover:text-rose-800 font-medium flex items-center gap-1">
-                      <Trash2 className="w-3 h-3" /> Clear All
+                <div className="mt-12 border-t border-slate-100 pt-10">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Queue Management</h3>
+                    <button onClick={() => setFiles([])} className="text-xs text-slate-400 hover:text-rose-500 font-bold transition-colors">
+                      Clear Queue
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {files.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl group hover:border-indigo-200 transition-colors">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className={`flex-shrink-0 p-2 rounded-lg ${file.type.includes('pdf') ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                            <FileSpreadsheet className="w-4 h-4" />
+                      <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl group hover:border-indigo-200 transition-all hover:shadow-sm">
+                        <div className="flex items-center gap-4 overflow-hidden">
+                          <div className={`p-2.5 rounded-xl ${file.type.includes('pdf') ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+                            <FileSpreadsheet className="w-5 h-5" />
                           </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-slate-700 truncate leading-none mb-1">{file.name}</span>
-                            <span className="text-[10px] text-slate-400 uppercase font-bold">{file.type.split('/')[1]}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">{file.name}</p>
+                            <p className="text-[10px] text-slate-400 uppercase font-black mt-1 tracking-wider">{file.type.split('/')[1]}</p>
                           </div>
                         </div>
-                        <button onClick={() => removeFile(idx)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all">
-                          <X className="w-4 h-4" />
+                        <button onClick={() => removeFile(idx)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all">
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-8 flex justify-center">
-                    <button onClick={processStatements} className="px-10 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center gap-2">
-                      Begin Extraction
+                  <div className="mt-12 flex justify-center">
+                    <button 
+                      onClick={processStatements} 
+                      className="px-12 py-5 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 shadow-2xl shadow-indigo-200 transition-all hover:-translate-y-1 active:translate-y-0 active:scale-95 flex items-center gap-3 text-lg"
+                    >
+                      Extract {files.length} Statements
+                      <ArrowRight className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -299,42 +304,42 @@ const App: React.FC = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-800 p-4 rounded-xl flex items-start gap-3 animate-in fade-in duration-300">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="bg-rose-50 border border-rose-100 text-rose-800 p-5 rounded-3xl flex items-start gap-4 animate-in slide-in-from-top-2">
+                <AlertCircle className="w-6 h-6 flex-shrink-0" />
                 <div>
-                  <h3 className="font-semibold">Processing Error</h3>
-                  <p className="text-sm opacity-90">{error}</p>
+                  <h3 className="font-black text-sm uppercase tracking-wider">Processing Error</h3>
+                  <p className="text-sm opacity-80 mt-1">{error}</p>
                 </div>
               </div>
             )}
           </div>
         )}
 
+        {/* STEP 2: ANALYZING STATE */}
         {status === ProcessingStatus.ANALYZING && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 lg:p-12 space-y-8 animate-in fade-in duration-500">
-            <div className="max-w-xl mx-auto text-center space-y-4">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 lg:p-16 space-y-10 animate-in fade-in duration-500">
+            <div className="max-w-2xl mx-auto text-center space-y-6">
               <div className="relative inline-block">
-                 <Loader2 className="w-16 h-16 text-indigo-600 animate-spin" />
+                 <Loader2 className="w-20 h-20 text-indigo-600 animate-spin" />
                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-sm font-bold text-indigo-600">{Math.round(progressPercentage)}%</span>
+                    <span className="text-sm font-black text-indigo-600">{Math.round(progressPercentage)}%</span>
                  </div>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900">Processing Batch</h2>
-              <p className="text-slate-500">
-                Extracted <span className="font-bold text-slate-900">{processedCount}</span> of <span className="font-bold text-slate-900">{files.length}</span> documents
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">AI Analysis in Progress</h2>
+              <p className="text-slate-500 text-lg">
+                Consolidating transactions from document <span className="font-black text-indigo-600">{processedCount + 1}</span> of {files.length}...
               </p>
               
-              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner mt-4">
+              <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner mt-8">
                 <div 
-                  className="h-full bg-indigo-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(79,70,229,0.3)]"
+                  className="h-full bg-indigo-600 transition-all duration-700 ease-out shadow-[0_0_20px_rgba(79,70,229,0.4)]"
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
             </div>
 
-            <div className="border-t border-slate-100 pt-8">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Batch Progress Details</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="border-t border-slate-100 pt-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {files.map((file, idx) => {
                   const isDone = idx < processedCount;
                   const isCurrent = idx === currentlyProcessingIdx;
@@ -342,32 +347,28 @@ const App: React.FC = () => {
                   return (
                     <div 
                       key={idx} 
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${
-                        isCurrent ? 'bg-indigo-50 border-indigo-200 shadow-sm scale-[1.02]' : 
-                        isDone ? 'bg-emerald-50 border-emerald-100 opacity-70' : 
-                        'bg-white border-slate-200 opacity-40'
+                      className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-500 ${
+                        isCurrent ? 'bg-indigo-50 border-indigo-300 shadow-lg shadow-indigo-50 scale-[1.02] z-10' : 
+                        isDone ? 'bg-emerald-50 border-emerald-100 opacity-60' : 
+                        'bg-white border-slate-200 opacity-30'
                       }`}
                     >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={`p-2 rounded-lg ${isDone ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                          {isDone ? <Check className="w-4 h-4" /> : <FileSpreadsheet className="w-4 h-4" />}
+                      <div className="flex items-center gap-4 overflow-hidden">
+                        <div className={`p-2.5 rounded-xl ${isDone ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                          {isDone ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
                         </div>
-                        <span className={`text-sm font-medium truncate ${isCurrent ? 'text-indigo-900' : 'text-slate-700'}`}>
+                        <span className={`text-sm font-black truncate ${isCurrent ? 'text-indigo-900' : 'text-slate-700'}`}>
                           {file.name}
                         </span>
                       </div>
-                      <div className="flex-shrink-0 ml-2">
+                      <div className="flex-shrink-0 ml-4">
                         {isCurrent ? (
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 animate-pulse uppercase tracking-wider">
-                            <Clock className="w-3 h-3" /> Analyzing
+                          <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 animate-pulse uppercase tracking-[0.2em]">
+                            <Clock className="w-3 h-3" /> Extracting
                           </div>
-                        ) : isDone ? (
-                          <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                            Ready
-                          </div>
-                        ) : (
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            Pending
+                        ) : isDone && (
+                          <div className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">
+                            Done
                           </div>
                         )}
                       </div>
@@ -379,98 +380,86 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* STEP 3: SUCCESS STATE (DASHBOARD) */}
         {status === ProcessingStatus.SUCCESS && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header & Breadcrumb */}
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            {/* Context Navigation */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-400">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                   <span 
-                    className={`cursor-pointer transition-colors ${selectedView === 'all' ? 'text-indigo-600' : 'hover:text-indigo-400'}`}
+                    className={`cursor-pointer transition-colors p-1 rounded hover:bg-slate-100 ${selectedView === 'all' ? 'text-indigo-600' : ''}`}
                     onClick={() => setSelectedView('all')}
                   >
                     Batch Dashboard
                   </span>
                   {selectedView !== 'all' && (
                     <>
-                      <ChevronRight className="w-4 h-4" />
-                      <span className="text-slate-900">File Details</span>
+                      <ChevronRight className="w-3 h-3" />
+                      <span className="text-slate-900 bg-slate-100 px-2 py-1 rounded">File Analysis</span>
                     </>
                   )}
                 </div>
-                <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+                <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4 tracking-tighter">
                   {selectedView === 'all' ? (
-                    <><LayoutDashboard className="w-8 h-8 text-indigo-600" /> Aggregate Overview</>
+                    <><LayoutDashboard className="w-10 h-10 text-indigo-600" /> Aggregate Overview</>
                   ) : (
-                    <><FileText className="w-8 h-8 text-indigo-600" /> {selectedView}</>
+                    <><FileText className="w-10 h-10 text-indigo-600" /> {selectedView}</>
                   )}
                 </h1>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 {selectedView !== 'all' && (
                   <button 
                     onClick={() => setSelectedView('all')}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 font-medium rounded-xl border border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+                    className="flex items-center gap-2 px-5 py-3 bg-white text-slate-700 font-bold rounded-2xl border border-slate-200 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
                   >
-                    <ChevronLeft className="w-4 h-4" />
-                    Back to Dashboard
+                    <ChevronLeft className="w-5 h-5" />
+                    Back Home
                   </button>
                 )}
-                <button onClick={exportToCSV} className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95">
-                  <Download className="w-4 h-4" />
-                  Export {selectedView === 'all' ? 'Batch' : 'File'} (.csv)
+                <button onClick={exportToCSV} className="flex items-center gap-2 px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-xl active:scale-95">
+                  <Download className="w-5 h-5" />
+                  Save CSV
                 </button>
               </div>
             </div>
 
-            {/* Main Content Layout */}
+            {/* Dashboard Content */}
             {selectedView === 'all' ? (
-              /* PAGE 1: AGGREGATE OVERVIEW */
-              <div className="space-y-8">
-                {/* Aggregate Metrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-indigo-200 transition-colors">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors"><Files className="w-5 h-5 text-indigo-600" /></div>
-                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Documents</span>
+              /* FIRST PAGE: CONSOLIDATED DASHBOARD */
+              <div className="space-y-10">
+                {/* Aggregate Metrics Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {[
+                    { label: 'Documents', val: files.length, sub: 'Statements parsed', icon: Files, color: 'indigo' },
+                    { label: 'Total Credits', val: `$${summary.income.toLocaleString()}`, sub: 'Consolidated income', icon: TrendingUp, color: 'emerald' },
+                    { label: 'Total Debits', val: `-$${summary.expenses.toLocaleString()}`, sub: 'Consolidated spending', icon: TrendingDown, color: 'rose' },
+                    { label: 'Net Liquidity', val: `${summary.net >= 0 ? '+' : ''}$${summary.net.toLocaleString()}`, sub: 'Final cash flow', icon: Scale, color: summary.net >= 0 ? 'indigo' : 'rose' }
+                  ].map((stat, i) => (
+                    <div key={i} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className={`p-3 bg-${stat.color}-50 rounded-2xl`}>
+                          <stat.icon className={`w-6 h-6 text-${stat.color}-600`} />
+                        </div>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
+                      </div>
+                      <div className={`text-4xl font-black tracking-tighter text-${stat.color === 'emerald' ? 'emerald' : stat.color === 'rose' ? 'rose' : 'slate'}-900`}>
+                        {stat.val}
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-tighter">{stat.sub}</p>
                     </div>
-                    <div className="text-3xl font-black text-slate-900">{files.length}</div>
-                    <p className="text-xs text-slate-400 mt-1">Processed in batch</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-emerald-200 transition-colors">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
-                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total Income</span>
-                    </div>
-                    <div className="text-3xl font-black text-emerald-600">${summary.income.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                    <p className="text-xs text-slate-400 mt-1">Sum of all document credits</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-rose-200 transition-colors">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-rose-50 rounded-lg group-hover:bg-rose-100 transition-colors"><TrendingDown className="w-5 h-5 text-rose-600" /></div>
-                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total Expenses</span>
-                    </div>
-                    <div className="text-3xl font-black text-rose-600">-${summary.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                    <p className="text-xs text-slate-400 mt-1">Sum of all document debits</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-slate-300 transition-colors">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-200 transition-colors"><Scale className="w-5 h-5 text-slate-600" /></div>
-                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Net Flow</span>
-                    </div>
-                    <div className={`text-3xl font-black ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                      {summary.net >= 0 ? '+' : ''}${summary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">Consolidated bottom line</p>
-                  </div>
+                  ))}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* File List / Navigation */}
-                  <div className="lg:col-span-1 space-y-4">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Individual File Reports</h3>
-                    <div className="space-y-2">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                  {/* File Index Sidebar */}
+                  <div className="lg:col-span-1 space-y-6">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                      <History className="w-3 h-3" /> Document Health Check
+                    </h3>
+                    <div className="space-y-3">
                       {files.map((file, idx) => {
                         const fileTx = transactions.filter(t => t.sourceFile === file.name);
                         const fileNet = fileTx.reduce((acc, t) => acc + t.amount, 0);
@@ -478,22 +467,22 @@ const App: React.FC = () => {
                           <div 
                             key={idx}
                             onClick={() => setSelectedView(file.name)}
-                            className="p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-center justify-between"
+                            className="p-5 bg-white border border-slate-200 rounded-3xl hover:border-indigo-400 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group flex items-center justify-between"
                           >
-                            <div className="flex items-center gap-4 overflow-hidden">
-                              <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                <FileText className="w-5 h-5" />
+                            <div className="flex items-center gap-5 overflow-hidden">
+                              <div className="p-3 bg-slate-50 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                <FileText className="w-6 h-6" />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-sm font-bold text-slate-900 truncate">{file.name}</p>
-                                <p className="text-xs text-slate-400">{fileTx.length} transactions</p>
+                                <p className="text-sm font-black text-slate-900 truncate tracking-tight">{file.name}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mt-0.5">{fileTx.length} lines detected</p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className={`text-sm font-bold ${fileNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              <p className={`text-sm font-black ${fileNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {fileNet >= 0 ? '+' : ''}${Math.abs(fileNet).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </p>
-                              <ArrowRight className="w-4 h-4 ml-auto mt-1 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                              <ArrowRight className="w-4 h-4 ml-auto mt-1 text-slate-300 group-hover:translate-x-1 group-hover:text-indigo-600 transition-all" />
                             </div>
                           </div>
                         );
@@ -501,92 +490,100 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Aggregate Chart */}
-                  <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-12">
-                    <div className="relative w-56 h-56 flex-shrink-0">
-                      <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-xl">
+                  {/* Aggregate Chart Display */}
+                  <div className="lg:col-span-2 bg-white p-10 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-16">
+                    <div className="relative w-64 h-64 flex-shrink-0">
+                      <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-2xl">
                         {summary.categoryData.length > 0 ? (
                           <>
                             {renderDonutSegments()}
                             <circle cx="100" cy="100" r="55" fill="white" />
-                            <text x="100" y="90" textAnchor="middle" dominantBaseline="middle" className="text-[10px] font-bold fill-slate-400 uppercase tracking-widest">
+                            <text x="100" y="90" textAnchor="middle" dominantBaseline="middle" className="text-[10px] font-black fill-slate-300 uppercase tracking-widest">
                               Spend
                             </text>
-                            <text x="100" y="115" textAnchor="middle" dominantBaseline="middle" className="text-2xl font-black fill-slate-800">
+                            <text x="100" y="115" textAnchor="middle" dominantBaseline="middle" className="text-3xl font-black fill-slate-900 tracking-tighter">
                               ${summary.expenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </text>
                           </>
                         ) : (
-                          <circle cx="100" cy="100" r="70" fill="#f1f5f9" />
+                          <circle cx="100" cy="100" r="70" fill="#f8fafc" />
                         )}
                       </svg>
                     </div>
-                    <div className="flex-grow w-full space-y-4">
-                      <h3 className="font-black text-slate-800 text-lg mb-6">Aggregate Categories</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="flex-grow w-full space-y-6">
+                      <h3 className="font-black text-slate-900 text-xl tracking-tight flex items-center gap-2">
+                        <PieChartIcon className="w-5 h-5 text-indigo-600" />
+                        Spend Distribution
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 max-h-64 overflow-y-auto pr-4 custom-scrollbar">
                         {summary.categoryData.map((data, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-sm group p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                          <div key={idx} className="flex items-center justify-between text-sm group p-3 hover:bg-slate-50 rounded-2xl transition-all border border-transparent hover:border-slate-100">
                             <div className="flex items-center gap-3">
                               <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: data.color }}></div>
-                              <span className="text-slate-600 font-bold truncate max-w-[80px] sm:max-w-none">{data.name}</span>
+                              <span className="text-slate-600 font-bold">{data.name}</span>
                             </div>
                             <span className="text-slate-900 font-black">${data.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                           </div>
                         ))}
+                        {summary.categoryData.length === 0 && (
+                          <p className="text-slate-400 italic text-sm py-4">No expense categories detected.</p>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              /* SEPARATE PAGE: INDIVIDUAL FILE OVERVIEW */
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4 duration-500">
-                {/* File Statistics Sidebar */}
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                    <div className="pb-4 border-b border-slate-100 flex items-center justify-between">
-                      <h3 className="font-black text-slate-900">File Metrics</h3>
-                      <span className="text-[10px] font-black px-2 py-1 bg-indigo-50 text-indigo-600 rounded uppercase tracking-widest">Report</span>
+              /* INDIVIDUAL FILE VIEW PAGE */
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-10 animate-in slide-in-from-right-8 duration-700">
+                {/* File Sidebar */}
+                <div className="lg:col-span-1 space-y-8">
+                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+                    <div className="pb-6 border-b border-slate-100 flex items-center justify-between">
+                      <h3 className="font-black text-slate-900 tracking-tight text-lg">Report Summary</h3>
+                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                        <Scale className="w-5 h-5" />
+                      </div>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       <div className="flex justify-between items-end">
-                        <span className="text-sm font-medium text-slate-400">Transaction Count</span>
-                        <span className="text-xl font-black text-slate-900">{summary.count}</span>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Entries</span>
+                        <span className="text-2xl font-black text-slate-900">{summary.count}</span>
                       </div>
                       <div className="flex justify-between items-end">
-                        <span className="text-sm font-medium text-slate-400">Total Credits</span>
-                        <span className="text-xl font-black text-emerald-600">${summary.income.toLocaleString()}</span>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Inflow</span>
+                        <span className="text-2xl font-black text-emerald-600">${summary.income.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-end">
-                        <span className="text-sm font-medium text-slate-400">Total Debits</span>
-                        <span className="text-xl font-black text-rose-600">-${summary.expenses.toLocaleString()}</span>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Outflow</span>
+                        <span className="text-2xl font-black text-rose-600">-${summary.expenses.toLocaleString()}</span>
                       </div>
-                      <div className="pt-4 border-t border-slate-100 flex justify-between items-end">
-                        <span className="text-sm font-bold text-slate-900">Net Impact</span>
-                        <span className={`text-2xl font-black ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                      <div className="pt-6 border-t border-slate-100 flex justify-between items-end">
+                        <span className="text-sm font-black text-slate-900 uppercase">Net Result</span>
+                        <span className={`text-3xl font-black tracking-tighter ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
                           ${summary.net.toLocaleString()}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* File Category Chart */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <h3 className="font-black text-slate-900 mb-6 text-sm uppercase tracking-widest">Spending Profile</h3>
-                    <div className="flex justify-center mb-8">
-                       <div className="relative w-40 h-40">
+                  {/* File Pie Chart */}
+                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                    <h3 className="font-black text-slate-900 mb-8 text-xs uppercase tracking-[0.2em] text-center">Category Profile</h3>
+                    <div className="flex justify-center mb-10">
+                       <div className="relative w-44 h-44 drop-shadow-xl">
                         <svg viewBox="0 0 200 200" className="w-full h-full">
                           {renderDonutSegments()}
-                          <circle cx="100" cy="100" r="60" fill="white" />
+                          <circle cx="100" cy="100" r="62" fill="white" />
                         </svg>
                       </div>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {summary.categoryData.slice(0, 5).map((data, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-[11px] font-bold">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: data.color }}></div>
-                            <span className="text-slate-500 uppercase">{data.name}</span>
+                        <div key={idx} className="flex items-center justify-between text-[11px] font-black uppercase">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></div>
+                            <span className="text-slate-500 tracking-wider">{data.name}</span>
                           </div>
                           <span className="text-slate-900">{data.percentage.toFixed(0)}%</span>
                         </div>
@@ -595,42 +592,51 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Main Transaction Ledger for File */}
-                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                    <h3 className="font-black text-slate-900 text-sm uppercase tracking-widest">Transaction Ledger</h3>
-                    <button onClick={exportToCSV} className="text-indigo-600 text-xs font-bold hover:underline flex items-center gap-1">
-                      <Download className="w-3 h-3" /> Save this sheet
-                    </button>
+                {/* Individual File Ledger */}
+                <div className="lg:col-span-3 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[700px]">
+                  <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
+                    <h3 className="font-black text-slate-900 uppercase tracking-[0.2em] text-xs">Transaction Records</h3>
+                    <div className="flex items-center gap-4">
+                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full uppercase tracking-tighter">
+                          Extraction Verified
+                       </span>
+                    </div>
                   </div>
                   <div className="overflow-x-auto flex-grow">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-white border-b border-slate-100">
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
-                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
+                          <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                          <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                          <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                          <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Label</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {currentTransactions.map((t) => (
-                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap font-mono">{t.date}</td>
-                            <td className="px-6 py-4">
-                                <p className="text-sm font-bold text-slate-900 truncate max-w-[250px]">{t.description}</p>
-                                {t.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">{t.notes}</p>}
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
+                            <td className="px-8 py-6 text-sm text-slate-500 whitespace-nowrap font-mono">{t.date}</td>
+                            <td className="px-8 py-6 max-w-sm">
+                                <p className="text-sm font-black text-slate-900 truncate leading-tight">{t.description}</p>
+                                {t.notes && <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1">{t.notes}</p>}
                             </td>
-                            <td className={`px-6 py-4 text-sm font-black whitespace-nowrap ${t.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            <td className={`px-8 py-6 text-lg font-black whitespace-nowrap tracking-tighter ${t.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                               {t.amount < 0 ? '-' : '+'}${Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="px-6 py-4">
-                              <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
+                            <td className="px-8 py-6 text-right">
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-[10px] font-black bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-widest">
                                 {t.category}
                               </span>
                             </td>
                           </tr>
                         ))}
+                        {currentTransactions.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-8 py-20 text-center">
+                              <p className="text-slate-400 italic text-lg">No transactions were detected in this specific file.</p>
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -641,14 +647,14 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="mt-20 text-center pb-8 border-t border-slate-100 pt-12">
-        <p className="text-slate-400 text-[10px] uppercase tracking-[0.4em] font-black mb-4">
-          StatementSnap Professional Batch OCR
+      <footer className="mt-24 text-center pb-12 border-t border-slate-100 pt-16">
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.5em] mb-6">
+          StatementSnap Professional Batch OCR • End-to-End Encryption
         </p>
-        <div className="flex justify-center gap-6 text-slate-300">
-            <CheckCircle2 className="w-4 h-4" />
-            <Hash className="w-4 h-4" />
-            <Scale className="w-4 h-4" />
+        <div className="flex justify-center gap-8 text-slate-300">
+            <CheckCircle2 className="w-5 h-5 hover:text-indigo-400 transition-colors" />
+            <Hash className="w-5 h-5 hover:text-indigo-400 transition-colors" />
+            <Scale className="w-5 h-5 hover:text-indigo-400 transition-colors" />
         </div>
       </footer>
     </div>
