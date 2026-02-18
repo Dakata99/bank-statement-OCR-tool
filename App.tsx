@@ -21,7 +21,9 @@ import {
   PieChart as PieChartIcon,
   LayoutDashboard,
   FileText,
-  ChevronRight
+  ChevronLeft,
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
 import { Transaction, ProcessingStatus, FileData } from './types';
 import { extractTransactions } from './services/geminiService';
@@ -58,7 +60,6 @@ const App: React.FC = () => {
     const income = currentTransactions.filter(t => t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
     const expenses = currentTransactions.filter(t => t.amount < 0).reduce((acc, t) => acc + t.amount, 0);
     
-    // Group by category for chart
     const categoryMap: Record<string, number> = {};
     currentTransactions.forEach(t => {
       if (t.amount < 0) {
@@ -133,10 +134,7 @@ const App: React.FC = () => {
       for (let i = 0; i < files.length; i++) {
         setCurrentlyProcessingIdx(i);
         const result = await extractTransactions([files[i]]);
-        
-        // Add source file tag to each transaction
         const taggedResults = result.map(t => ({ ...t, sourceFile: files[i].name }));
-        
         allExtractedTransactions.push(...taggedResults);
         setProcessedCount(i + 1);
       }
@@ -144,7 +142,7 @@ const App: React.FC = () => {
       setTransactions(allExtractedTransactions);
       setStatus(ProcessingStatus.SUCCESS);
       setCurrentlyProcessingIdx(null);
-      setSelectedView('all'); // Default to overview after success
+      setSelectedView('all');
     } catch (err: any) {
       setError(err.message || "Failed to extract data. Please ensure the files are valid PDFs or images.");
       setStatus(ProcessingStatus.ERROR);
@@ -220,15 +218,15 @@ const App: React.FC = () => {
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => status === ProcessingStatus.SUCCESS && setSelectedView('all')}>
               <div className="bg-indigo-600 p-2 rounded-lg">
                 <Wallet className="w-6 h-6 text-white" />
               </div>
               <span className="text-xl font-bold text-slate-900 tracking-tight">StatementSnap</span>
             </div>
             {status === ProcessingStatus.SUCCESS && (
-              <button onClick={reset} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors px-4 py-2 hover:bg-indigo-50 rounded-lg">
-                Start New Batch
+              <button onClick={reset} className="text-sm font-medium text-slate-400 hover:text-rose-600 transition-colors px-4 py-2 hover:bg-rose-50 rounded-lg">
+                Discard & Reset
               </button>
             )}
           </div>
@@ -383,213 +381,275 @@ const App: React.FC = () => {
 
         {status === ProcessingStatus.SUCCESS && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* View Switcher / Tabs */}
-            <div className="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
-              <button
-                onClick={() => setSelectedView('all')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-semibold border-2 ${
-                  selectedView === 'all' 
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200 hover:text-indigo-600'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                Aggregate Overview
-              </button>
-              <div className="h-8 w-px bg-slate-200 self-center mx-2 hidden sm:block"></div>
-              {files.map((file, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedView(file.name)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-semibold border-2 ${
-                    selectedView === file.name 
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200 hover:text-indigo-600'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  {file.name}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            {/* Header & Breadcrumb */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-400">
+                  <span 
+                    className={`cursor-pointer transition-colors ${selectedView === 'all' ? 'text-indigo-600' : 'hover:text-indigo-400'}`}
+                    onClick={() => setSelectedView('all')}
+                  >
+                    Batch Dashboard
+                  </span>
+                  {selectedView !== 'all' && (
+                    <>
+                      <ChevronRight className="w-4 h-4" />
+                      <span className="text-slate-900">File Details</span>
+                    </>
+                  )}
+                </div>
+                <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
                   {selectedView === 'all' ? (
-                    <><CheckCircle2 className="w-7 h-7 text-emerald-500" /> Batch Summary</>
+                    <><LayoutDashboard className="w-8 h-8 text-indigo-600" /> Aggregate Overview</>
                   ) : (
-                    <><FileText className="w-7 h-7 text-indigo-500" /> {selectedView}</>
+                    <><FileText className="w-8 h-8 text-indigo-600" /> {selectedView}</>
                   )}
                 </h1>
-                <p className="text-slate-500">
-                  {selectedView === 'all' 
-                    ? `Showing data from ${files.length} consolidated documents.` 
-                    : `Showing individual results for the selected file.`}
-                </p>
               </div>
-              <button onClick={exportToCSV} className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95">
-                <Download className="w-4 h-4" />
-                Export {selectedView === 'all' ? 'Batch' : 'File'} CSV
-              </button>
-            </div>
-
-            {/* Dashboard Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-indigo-50 rounded-lg"><Hash className="w-5 h-5 text-indigo-600" /></div>
-                  <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">Entries</span>
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{summary.count}</div>
-                <p className="text-xs text-slate-400 mt-1">Transaction count</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-emerald-50 rounded-lg"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
-                  <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">Income</span>
-                </div>
-                <div className="text-3xl font-bold text-emerald-600">${summary.income.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                <p className="text-xs text-slate-400 mt-1">Total credit volume</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-rose-50 rounded-lg"><TrendingDown className="w-5 h-5 text-rose-600" /></div>
-                  <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">Expenses</span>
-                </div>
-                <div className="text-3xl font-bold text-rose-600">-${summary.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                <p className="text-xs text-slate-400 mt-1">Total debit volume</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-slate-100 rounded-lg"><Scale className="w-5 h-5 text-slate-600" /></div>
-                  <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">Net Change</span>
-                </div>
-                <div className={`text-3xl font-bold ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                  {summary.net >= 0 ? '+' : ''}${summary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-xs text-slate-400 mt-1">Statement net impact</p>
+              
+              <div className="flex items-center gap-3">
+                {selectedView !== 'all' && (
+                  <button 
+                    onClick={() => setSelectedView('all')}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 font-medium rounded-xl border border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to Dashboard
+                  </button>
+                )}
+                <button onClick={exportToCSV} className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95">
+                  <Download className="w-4 h-4" />
+                  Export {selectedView === 'all' ? 'Batch' : 'File'} (.csv)
+                </button>
               </div>
             </div>
 
-            {/* Visuals & Table */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Category Breakdown Chart */}
-              <div className="lg:col-span-1 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
-                <div className="w-full flex justify-between items-center mb-8">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <PieChartIcon className="w-5 h-5 text-indigo-600" />
-                    Category Breakdown
-                  </h3>
-                </div>
-                
-                <div className="relative w-48 h-48 mb-8">
-                  <svg viewBox="0 0 200 200" className="w-full h-full">
-                    {summary.categoryData.length > 0 ? (
-                      <>
-                        {renderDonutSegments()}
-                        <circle cx="100" cy="100" r="55" fill="white" />
-                        <text x="100" y="95" textAnchor="middle" dominantBaseline="middle" className="text-[10px] font-bold fill-slate-400 uppercase tracking-widest">
-                          Spent
-                        </text>
-                        <text x="100" y="115" textAnchor="middle" dominantBaseline="middle" className="text-lg font-bold fill-slate-800">
-                          ${summary.expenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </text>
-                      </>
-                    ) : (
-                      <circle cx="100" cy="100" r="70" fill="#f1f5f9" />
-                    )}
-                  </svg>
+            {/* Main Content Layout */}
+            {selectedView === 'all' ? (
+              /* PAGE 1: AGGREGATE OVERVIEW */
+              <div className="space-y-8">
+                {/* Aggregate Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-indigo-200 transition-colors">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors"><Files className="w-5 h-5 text-indigo-600" /></div>
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Documents</span>
+                    </div>
+                    <div className="text-3xl font-black text-slate-900">{files.length}</div>
+                    <p className="text-xs text-slate-400 mt-1">Processed in batch</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-emerald-200 transition-colors">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total Income</span>
+                    </div>
+                    <div className="text-3xl font-black text-emerald-600">${summary.income.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    <p className="text-xs text-slate-400 mt-1">Sum of all document credits</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-rose-200 transition-colors">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-rose-50 rounded-lg group-hover:bg-rose-100 transition-colors"><TrendingDown className="w-5 h-5 text-rose-600" /></div>
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total Expenses</span>
+                    </div>
+                    <div className="text-3xl font-black text-rose-600">-${summary.expenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    <p className="text-xs text-slate-400 mt-1">Sum of all document debits</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-slate-300 transition-colors">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-slate-200 transition-colors"><Scale className="w-5 h-5 text-slate-600" /></div>
+                      <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Net Flow</span>
+                    </div>
+                    <div className={`text-3xl font-black ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                      {summary.net >= 0 ? '+' : ''}${summary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Consolidated bottom line</p>
+                  </div>
                 </div>
 
-                <div className="w-full space-y-3 overflow-y-auto max-h-64 pr-2 custom-scrollbar">
-                  {summary.categoryData.map((data, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-sm group">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: data.color }}></div>
-                        <span className="text-slate-600 font-medium group-hover:text-slate-900 transition-colors">{data.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-400 text-xs">{data.percentage.toFixed(1)}%</span>
-                        <span className="text-slate-900 font-bold">${data.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* File List / Navigation */}
+                  <div className="lg:col-span-1 space-y-4">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em]">Individual File Reports</h3>
+                    <div className="space-y-2">
+                      {files.map((file, idx) => {
+                        const fileTx = transactions.filter(t => t.sourceFile === file.name);
+                        const fileNet = fileTx.reduce((acc, t) => acc + t.amount, 0);
+                        return (
+                          <div 
+                            key={idx}
+                            onClick={() => setSelectedView(file.name)}
+                            className="p-4 bg-white border border-slate-200 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-4 overflow-hidden">
+                              <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-900 truncate">{file.name}</p>
+                                <p className="text-xs text-slate-400">{fileTx.length} transactions</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-sm font-bold ${fileNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {fileNet >= 0 ? '+' : ''}${Math.abs(fileNet).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </p>
+                              <ArrowRight className="w-4 h-4 ml-auto mt-1 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Aggregate Chart */}
+                  <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-12">
+                    <div className="relative w-56 h-56 flex-shrink-0">
+                      <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-xl">
+                        {summary.categoryData.length > 0 ? (
+                          <>
+                            {renderDonutSegments()}
+                            <circle cx="100" cy="100" r="55" fill="white" />
+                            <text x="100" y="90" textAnchor="middle" dominantBaseline="middle" className="text-[10px] font-bold fill-slate-400 uppercase tracking-widest">
+                              Spend
+                            </text>
+                            <text x="100" y="115" textAnchor="middle" dominantBaseline="middle" className="text-2xl font-black fill-slate-800">
+                              ${summary.expenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </text>
+                          </>
+                        ) : (
+                          <circle cx="100" cy="100" r="70" fill="#f1f5f9" />
+                        )}
+                      </svg>
+                    </div>
+                    <div className="flex-grow w-full space-y-4">
+                      <h3 className="font-black text-slate-800 text-lg mb-6">Aggregate Categories</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        {summary.categoryData.map((data, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-sm group p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: data.color }}></div>
+                              <span className="text-slate-600 font-bold truncate max-w-[80px] sm:max-w-none">{data.name}</span>
+                            </div>
+                            <span className="text-slate-900 font-black">${data.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                  {summary.categoryData.length === 0 && (
-                    <p className="text-center text-slate-400 italic text-sm py-4">No expense categories detected.</p>
-                  )}
+                  </div>
                 </div>
               </div>
+            ) : (
+              /* SEPARATE PAGE: INDIVIDUAL FILE OVERVIEW */
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4 duration-500">
+                {/* File Statistics Sidebar */}
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                    <div className="pb-4 border-b border-slate-100 flex items-center justify-between">
+                      <h3 className="font-black text-slate-900">File Metrics</h3>
+                      <span className="text-[10px] font-black px-2 py-1 bg-indigo-50 text-indigo-600 rounded uppercase tracking-widest">Report</span>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <span className="text-sm font-medium text-slate-400">Transaction Count</span>
+                        <span className="text-xl font-black text-slate-900">{summary.count}</span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <span className="text-sm font-medium text-slate-400">Total Credits</span>
+                        <span className="text-xl font-black text-emerald-600">${summary.income.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <span className="text-sm font-medium text-slate-400">Total Debits</span>
+                        <span className="text-xl font-black text-rose-600">-${summary.expenses.toLocaleString()}</span>
+                      </div>
+                      <div className="pt-4 border-t border-slate-100 flex justify-between items-end">
+                        <span className="text-sm font-bold text-slate-900">Net Impact</span>
+                        <span className={`text-2xl font-black ${summary.net >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                          ${summary.net.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Transaction Ledger Table */}
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                  <h3 className="font-semibold text-slate-800">
-                    {selectedView === 'all' ? 'Consolidated Ledger' : `Ledger for ${selectedView}`}
-                  </h3>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-tighter">
-                    {currentTransactions.length} Entries
-                  </span>
+                  {/* File Category Chart */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 className="font-black text-slate-900 mb-6 text-sm uppercase tracking-widest">Spending Profile</h3>
+                    <div className="flex justify-center mb-8">
+                       <div className="relative w-40 h-40">
+                        <svg viewBox="0 0 200 200" className="w-full h-full">
+                          {renderDonutSegments()}
+                          <circle cx="100" cy="100" r="60" fill="white" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {summary.categoryData.slice(0, 5).map((data, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-[11px] font-bold">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: data.color }}></div>
+                            <span className="text-slate-500 uppercase">{data.name}</span>
+                          </div>
+                          <span className="text-slate-900">{data.percentage.toFixed(0)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="overflow-x-auto flex-grow">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-white border-b border-slate-200">
-                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Date</th>
-                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Description</th>
-                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Amount</th>
-                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Category</th>
-                        {selectedView === 'all' && <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Source</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {currentTransactions.map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50/80 transition-colors group">
-                          <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap font-mono">{t.date}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-slate-900 max-w-[200px] truncate">{t.description}</td>
-                          <td className={`px-6 py-4 text-sm font-bold whitespace-nowrap ${t.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {t.amount < 0 ? '-' : '+'}${Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tighter">
-                              {t.category}
-                            </span>
-                          </td>
-                          {selectedView === 'all' && (
+
+                {/* Main Transaction Ledger for File */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                    <h3 className="font-black text-slate-900 text-sm uppercase tracking-widest">Transaction Ledger</h3>
+                    <button onClick={exportToCSV} className="text-indigo-600 text-xs font-bold hover:underline flex items-center gap-1">
+                      <Download className="w-3 h-3" /> Save this sheet
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto flex-grow">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-white border-b border-slate-100">
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {currentTransactions.map((t) => (
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 text-sm text-slate-500 whitespace-nowrap font-mono">{t.date}</td>
                             <td className="px-6 py-4">
-                              <span className="text-[10px] text-slate-400 truncate max-w-[100px] inline-block font-medium italic">
-                                {t.sourceFile}
+                                <p className="text-sm font-bold text-slate-900 truncate max-w-[250px]">{t.description}</p>
+                                {t.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">{t.notes}</p>}
+                            </td>
+                            <td className={`px-6 py-4 text-sm font-black whitespace-nowrap ${t.amount < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                              {t.amount < 0 ? '-' : '+'}${Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
+                                {t.category}
                               </span>
                             </td>
-                          )}
-                        </tr>
-                      ))}
-                      {currentTransactions.length === 0 && (
-                        <tr>
-                          <td colSpan={selectedView === 'all' ? 5 : 4} className="px-6 py-12 text-center text-slate-400 italic">
-                            No transactions found for this selection.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </main>
 
-      <footer className="mt-20 text-center pb-8">
-        <div className="flex justify-center gap-4 mb-2">
-          <div className="h-1 w-12 bg-slate-200 rounded-full"></div>
-        </div>
-        <p className="text-slate-400 text-[10px] uppercase tracking-[0.2em] font-bold">
-          StatementSnap Professional Batch OCR • Secure In-Browser Processing
+      <footer className="mt-20 text-center pb-8 border-t border-slate-100 pt-12">
+        <p className="text-slate-400 text-[10px] uppercase tracking-[0.4em] font-black mb-4">
+          StatementSnap Professional Batch OCR
         </p>
+        <div className="flex justify-center gap-6 text-slate-300">
+            <CheckCircle2 className="w-4 h-4" />
+            <Hash className="w-4 h-4" />
+            <Scale className="w-4 h-4" />
+        </div>
       </footer>
     </div>
   );
